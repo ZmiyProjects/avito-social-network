@@ -5,6 +5,8 @@ CREATE SCHEMA net;
 CREATE TABLE net.UserAccount (
     user_id INT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     user_name VARCHAR(255) UNIQUE NOT NULL,
+	user_login VARCHAR(30) UNIQUE NOT NULL,
+	password_hash VARCHAR(256) NOT NULL,
     created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -29,10 +31,10 @@ CREATE TABLE net.Message (
 );
 
 -- Добавить пользователя
-CREATE FUNCTION net.add_user(_user_name VARCHAR(255)) RETURNS INT AS
+CREATE FUNCTION net.add_user(_user_login VARCHAR(30), _password_hash VARCHAR(256), _user_name VARCHAR(255)) RETURNS INT AS
     $$
     BEGIN
-        INSERT INTO net.UserAccount(user_name) VALUES (_user_name);
+        INSERT INTO net.UserAccount(user_name, user_login, password_hash) VALUES (_user_name, _user_login, _password_hash);
         RETURN currval('net.useraccount_user_id_seq');
     END;
     $$ LANGUAGE plpgsql;
@@ -66,11 +68,11 @@ CREATE FUNCTION net.send_message(_user_id INT, _chat_id INT, _message VARCHAR(10
     END;
     $$ LANGUAGE plpgsql;
 
-SELECT net.add_user('Иван');
-SELECT net.add_user('Сергей');
-SELECT net.add_user('Дмитрий');
-SELECT net.add_user('Анна');
-SELECT net.add_user('Мария');
+SELECT net.add_user('ivan', 'Иван', 'pass');
+SELECT net.add_user('s11', 'Сергей', 'pass');
+SELECT net.add_user('dima', 'Дмитрий', 'pass');
+SELECT net.add_user('ann', 'Анна', 'pass');
+SELECT net.add_user('m11', 'Мария', 'pass');
 
 SELECT net.add_chat('Переговорная1', '[1, 3]');
 SELECT net.add_chat('О моде', '[4, 5]');
