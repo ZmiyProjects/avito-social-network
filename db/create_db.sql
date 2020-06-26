@@ -153,8 +153,6 @@ CREATE OR REPLACE FUNCTION net.user_info(_user_id INT) RETURNS TABLE(j_values js
     END;
     $$ SECURITY DEFINER SET SEARCH_PATH = public LANGUAGE plpgsql;
 
-SELECT net.user_info(1);
-
 -- Получить сведения о пользователе и списое чатов, в которых он участвует
 CREATE OR REPLACE FUNCTION net.self_user_info(_user_id INT) RETURNS TABLE(j_values json) AS
     $$
