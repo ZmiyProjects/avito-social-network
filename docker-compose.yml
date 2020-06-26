@@ -11,12 +11,12 @@ services:
       interval: 10s
       timeout: 5s
 
-  code:
+  api:
     build: .
     volumes:
       - .:/api
     ports:
-      - "9080:9080"/home/zmiy
+      - "9080:9080"
     depends_on:
       - db
     command: python3 api/api.py

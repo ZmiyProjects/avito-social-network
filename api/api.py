@@ -41,13 +41,6 @@ def verify_password(username, password):
     return True
 
 
-@app.route('/hello')
-@auth.login_required
-def hello():
-    print(auth.user_id())
-    return 'hellom world!'
-
-
 @app.route('/users', methods=['POST'])
 def add_user():
     values = request.get_json()
@@ -63,13 +56,19 @@ def add_user():
     return jsonify(data=result), 201
 
 
-@app.route('/users/<user_id>', methods=['GET'])
+@app.route('/users/<int:user_id>', methods=['GET'])
 @auth.login_required
 def user_data(user_id):
-    if user_id == auth.user_id():
-        return {}
+    current_user = auth.user_id()
+    if user_id == current_user:
+        self_user_query = sql.text("SELECT net.self_user_info(:id);")
+        result = db.execute(self_user_query, id=user_id).scalar()
     else:
-        return {}
+        other_user_query = sql.text("SELECT net.user_info(:id);")
+        result = db.execute(other_user_query, id=user_id).scalar()
+    if result is None:
+        return jsonify(message="Пользователь не существует!"), 400
+    return jsonify(data=result), 200
 
 
 @app.route('/chats', methods=['POST'])

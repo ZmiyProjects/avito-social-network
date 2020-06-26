@@ -1,8 +1,9 @@
-CREATE DATABASE avito_social_network;
-
-\connect avito_social_network;
-
 CREATE SCHEMA net;
+
+CREATE USER network_user WITH PASSWORD 'pass';
+GRANT USAGE ON SCHEMA net TO network_user;
+GRANT EXECUTE ON ALL PROCEDURES IN SCHEMA net TO network_user;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA net TO network_user;
 
 CREATE TABLE net.UserAccount (
     user_id INT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
@@ -53,8 +54,6 @@ CREATE FUNCTION net.add_chat(_chat_name VARCHAR(255), users INT[]) RETURNS INT A
     END;
     $$ SECURITY DEFINER SET SEARCH_PATH = public LANGUAGE plpgsql;
 
-SELECT * FROM net.chat;
-
 -- Добавить пользователя в чат
 CREATE PROCEDURE net.add_chat_member(_user_id INT, _chat_id INT) AS
     $$
@@ -75,12 +74,7 @@ CREATE OR REPLACE FUNCTION Net.user_in_chat(_user_login VARCHAR(30), _chat_id IN
             RETURN FALSE;
         end if;
     END;
-    $$ LANGUAGE plpgsql;
-
-SELECT * FROM net.ChatUser;
-SELECT * FROM net.UserAccount;
-
-SELECT Net.user_in_chat('ann', 1);
+    $$ SECURITY DEFINER SET SEARCH_PATH = public LANGUAGE plpgsql;
 
 -- получить id пользователя по логину
 CREATE OR REPLACE FUNCTION net.get_user_id(_user_login VARCHAR(30)) RETURNS INT AS
@@ -88,9 +82,7 @@ CREATE OR REPLACE FUNCTION net.get_user_id(_user_login VARCHAR(30)) RETURNS INT 
     BEGIN
         RETURN (SELECT user_id FROM Net.UserAccount WHERE user_login = _user_login);
     END;
-    $$ LANGUAGE plpgsql;
-
-SELECT net.get_user_id('ivan3');
+    $$ SECURITY DEFINER SET SEARCH_PATH = public LANGUAGE plpgsql;
 
 -- Отправить сообщение в чат
 CREATE FUNCTION net.send_message(_user_id INT, _chat_id INT, _message VARCHAR(1000)) RETURNS INT AS
@@ -101,39 +93,13 @@ CREATE FUNCTION net.send_message(_user_id INT, _chat_id INT, _message VARCHAR(10
     END;
     $$ SECURITY DEFINER SET SEARCH_PATH = public LANGUAGE plpgsql;
 
-SELECT net.add_user('ivan', 'Иван', 'pass');
-SELECT net.add_user('s11', 'Сергей', 'pass');
-SELECT net.add_user('dima', 'Дмитрий', 'pass');
-SELECT net.add_user('ann', 'Анна', 'pass');
-SELECT net.add_user('m11', 'Мария', 'pass');
-
-SELECT net.add_chat('Переговорная1', '[1, 3]');
-SELECT net.add_chat('О моде', '[4, 5]');
-CALL net.add_chat_member(2, 1);
-SELECT net.add_chat('Обший', '[1, 2, 3, 4, 5]');
-
-SELECT net.send_message(1, 1, 'Всем Привет!');
-SELECT net.send_message(2, 1, 'Сегодня мы обсудим..');
-
-SELECT net.send_message(4, 2, 'Такс');
-SELECT net.send_message(4, 2, 'Приветики');
-SELECT net.send_message(5, 2, 'Все завтра!');
-SELECT net.send_message(4, 2, 'Но почему..');
-SELECT net.send_message(5, 3, 'Итак...');
-SELECT net.send_message(2, 1, 'Баг');
-SELECT net.add_chat('Свободное общение', '[1, 3, 4]');
-SELECT net.send_message(3, 4, 'Привет');
-
-SELECT * FROM json_array_elements('[1, 2, 8]') AS users
-    WHERE users::text::int NOT IN (SELECT user_id FROM net.UserAccount)
-
 -- Возвращает хеш от пароля пользователя
 CREATE OR REPLACE FUNCTION Net.get_password_hash(_user_login VARCHAR(30)) RETURNS VARCHAR(256) AS
     $$
     BEGIN
         RETURN (SELECT password_hash FROM net.UserAccount WHERE user_login = _user_login);
     END;
-    $$ LANGUAGE plpgsql;
+    $$ SECURITY DEFINER SET SEARCH_PATH = public LANGUAGE plpgsql;
 
 -- Список чатов, отсортированные по времени создания последнего сообщения в чате
 CREATE OR REPLACE FUNCTION net.get_user_chats(_user_id INT) RETURNS TABLE(json_values json) AS
@@ -148,10 +114,7 @@ CREATE OR REPLACE FUNCTION net.get_user_chats(_user_id INT) RETURNS TABLE(json_v
             JOIN net.Chat AS C ON CU.chat_id = C.chat_id AND CU.user_id = _user_id
         ORDER BY (SELECT MAX(M.created_at) FROM net.Message AS M WHERE M.chat_id = C.chat_id GROUP BY M.chat_id) DESC);
     END;
-    $$ LANGUAGE plpgsql;
-
-SELECT net.get_user_chats(4);
-
+    $$ SECURITY DEFINER SET SEARCH_PATH = public LANGUAGE plpgsql;
 
 -- список сообщений в конкретном чате
 CREATE OR REPLACE FUNCTION net.get_messages(_chat_id INT) RETURNS TABLE(json_values json) AS
@@ -171,18 +134,52 @@ CREATE OR REPLACE FUNCTION net.get_messages(_chat_id INT) RETURNS TABLE(json_val
                ORDER BY M.created_at DESC
         );
     END;
-    $$ LANGUAGE plpgsql;
+    $$ SECURITY DEFINER SET SEARCH_PATH = public LANGUAGE plpgsql;
 
-SELECT net.get_messages(2);
+-- Получить сведения о пользователе
+CREATE OR REPLACE FUNCTION net.user_info(_user_id INT) RETURNS TABLE(j_values json) AS
+    $$
+    BEGIN
+        RETURN QUERY (
+            SELECT
+                json_build_object(
+                    'user_id', user_id,
+                    'user_name', user_name,
+                    'created_at', created_at
+                    )
+            FROM net.useraccount AS U
+            WHERE U.user_id = _user_id
+        );
+    END;
+    $$ SECURITY DEFINER SET SEARCH_PATH = public LANGUAGE plpgsql;
 
-SELECT json_build_object(
-    'user', json_build_object(
-            'user_id', M.user_id,
-            'user_name', U.user_name),
-    'message_id', M.message_id,
-    'message_text', M.message_text,
-    'created_at', M.created_at)
-FROM net.Message AS M
-    JOIN net.UserAccount AS U ON M.user_id = U.user_id
-    WHERE M.chat_id = 1
-ORDER BY M.created_at DESC;
+SELECT net.user_info(1);
+
+-- Получить сведения о пользователе и списое чатов, в которых он участвует
+CREATE OR REPLACE FUNCTION net.self_user_info(_user_id INT) RETURNS TABLE(j_values json) AS
+    $$
+    BEGIN
+        RETURN QUERY (
+            WITH Temp_1 AS (
+               SELECT
+                   U.user_id,
+                   json_agg(
+                     json_build_object(
+                       'chat_id', C.chat_id,
+                       'chat_name', C.chat_name,
+                       'created_at', C.created_at)) AS jobj
+               FROM net.useraccount AS U
+                   JOIN net.chatuser AS CU ON U.user_id = _user_id AND U.user_id = CU.user_id
+                   JOIN net.chat AS C ON C.chat_id = CU.chat_id
+               GROUP BY U.user_id
+            )
+        SELECT
+            json_build_object(
+                'user_id', U.user_id,
+                'user_name', U.user_name,
+                'created_at', U.created_at,
+                'chats', COALESCE( (SELECT jobj FROM Temp_1), '[]'))
+        FROM net.useraccount AS U
+            WHERE U.user_id = _user_id);
+    END;
+    $$ SECURITY DEFINER SET SEARCH_PATH = public LANGUAGE plpgsql;
