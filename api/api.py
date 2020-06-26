@@ -3,9 +3,7 @@ import sys
 from flask import Flask, request, jsonify, abort
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import create_engine, sql
-from collections import namedtuple
 from flask_httpauth import HTTPBasicAuth
-from collections import namedtuple
 
 
 class SocialNetworkHTTPBasicAuth(HTTPBasicAuth):
