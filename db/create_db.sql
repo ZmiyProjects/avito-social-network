@@ -66,10 +66,13 @@ CREATE FUNCTION net.add_user(_user_login VARCHAR(30), _user_name VARCHAR(255), _
     $$ SECURITY DEFINER SET SEARCH_PATH = public LANGUAGE plpgsql;
 
 -- Создать чат между пользователями
-CREATE FUNCTION net.add_chat(_chat_name VARCHAR(255), users INT[]) RETURNS INT AS
+CREATE OR REPLACE FUNCTION net.add_chat(_chat_name VARCHAR(255), users INT[]) RETURNS INT AS
     $$
     DECLARE inserted_id INT;
     BEGIN
+        IF EXISTS(SELECT unnest(users) EXCEPT SELECT user_id FROM net.useraccount) THEN
+            RETURN NULL;
+        END IF;
         INSERT INTO net.Chat(chat_name) VALUES (_chat_name);
         inserted_id := currval('net.chat_chat_id_seq');
         INSERT INTO net.ChatUser(chat_id, user_id) SELECT inserted_id, unnest(users);
@@ -78,11 +81,16 @@ CREATE FUNCTION net.add_chat(_chat_name VARCHAR(255), users INT[]) RETURNS INT A
     $$ SECURITY DEFINER SET SEARCH_PATH = public LANGUAGE plpgsql;
 
 -- Добавить пользователя в чат
-CREATE FUNCTION net.add_chat_member(_user_id INT, _chat_id INT) RETURNS TABLE(j_values json) AS
+CREATE OR REPLACE FUNCTION net.add_chat_member(_user_id INT, _chat_id INT) RETURNS TABLE(j_values json) AS
     $$
     BEGIN
-        INSERT INTO net.ChatUser(user_id, chat_id) VALUES (_user_id, _chat_id);
-        RETURN QUERY (SELECT net.get_chat_members(_chat_id));
+        IF _user_id NOT IN (SELECT user_id FROM net.useraccount) OR
+           _chat_id NOT IN (SELECT chat_id FROM net.chat) THEN
+            RETURN QUERY (SELECT CAST(NULL AS json));
+        ELSE
+            INSERT INTO net.ChatUser(user_id, chat_id) VALUES (_user_id, _chat_id);
+            RETURN QUERY (SELECT net.get_chat_members(_chat_id));
+        END IF;
     END;
     $$ SECURITY DEFINER SET SEARCH_PATH = public LANGUAGE plpgsql;
 

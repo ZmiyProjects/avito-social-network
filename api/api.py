@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify, abort
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import create_engine, sql
 from flask_httpauth import HTTPBasicAuth
+import sqlalchemy.exc
 
 
 class SocialNetworkHTTPBasicAuth(HTTPBasicAuth):
@@ -78,10 +79,13 @@ def add_chat():
         return {}, 400
     if (users := values.get('users')) is None:
         return {}, 400
+    if current_user in users:
+        return {}, 400
     users.append(current_user)
     query = sql.text('SELECT net.add_chat(:name, :users);')
     with db.begin() as conn:
-        result = conn.execute(query, name=chat_name, users=users).scalar()
+        if (result := conn.execute(query, name=chat_name, users=users).scalar()) is None:
+            return {}, 400
     return jsonify(data=result), 201
 
 
@@ -90,11 +94,14 @@ def add_chat():
 def add_chat_member(chat_id):
     auth.user_in_chat(chat_id)
     values = request.get_json()
-    if (user_id_to_update := values.get('user_id')) is None:
+    if (user_id := values.get('user_id')) is None:
+        return {}, 400
+    if user_id == auth.user_id():
         return {}, 400
     query = sql.text('SELECT net.add_chat_member(:id, :chat_id);')
     with db.begin() as conn:
-        result = conn.execute(query, id=user_id_to_update, chat_id=chat_id).scalar()
+        if (result := conn.execute(query, id=user_id, chat_id=chat_id).scalar()) is None:
+            return {}, 400
     return jsonify(data=result), 201
 
 
