@@ -17,7 +17,7 @@ class SocialNetworkHTTPBasicAuth(HTTPBasicAuth):
 
     def user_in_chat(self, chat_id):
         sql_query = sql.text('SELECT Net.user_in_chat(:user_id, :chat_id);')
-        user_in_chat = db.execute(sql_query, user_id=self.user_id, chat_id=chat_id).scalar()
+        user_in_chat = db.execute(sql_query, user_id=self.user_id(), chat_id=chat_id).scalar()
         if not user_in_chat:
             abort(403)
 
@@ -90,12 +90,12 @@ def add_chat():
 def add_chat_member(chat_id):
     auth.user_in_chat(chat_id)
     values = request.get_json()
-    if (user_id := values.get('user_id')) is None:
+    if (user_id_to_update := values.get('user_id')) is None:
         return {}, 400
-    query = sql.text('CALL net.add_chat_member(:user_id, :chat_id);')
+    query = sql.text('SELECT net.add_chat_member(:id, :chat_id);')
     with db.begin() as conn:
-        conn.execute(query, user_id=user_id, chat_id=chat_id).scalar()
-    return {}, 201
+        result = conn.execute(query, id=user_id_to_update, chat_id=chat_id).scalar()
+    return jsonify(data=result), 201
 
 
 @app.route('/users/<int:user_id>/chats', methods=['GET'])
@@ -125,8 +125,6 @@ def send_message(chat_id):
     elif request.method == 'GET':
         query = sql.text('SELECT net.get_messages(:chat_id);')
         result = db.execute(query, chat_id=chat_id)
-        if result.fetchone() is None:
-            return {}, 400
         return jsonify([i[0] for i in result.fetchall()]), 200
 
 

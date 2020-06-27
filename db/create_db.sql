@@ -33,6 +33,29 @@ CREATE TABLE net.Message (
     user_id INT REFERENCES net.UserAccount(user_id) NOT NULL
 );
 
+-- Отобразить входящих в чат пользователей
+CREATE OR REPLACE FUNCTION net.get_chat_members(_chat_id INT) RETURNS TABLE(j_values json) AS
+    $$
+    BEGIN
+        RETURN QUERY (
+        WITH members AS (
+            SELECT json_agg(
+                   json_build_object(
+                           'user_id', U.user_id,
+                           'user_name', U.user_name)) members
+            FROM net.chatuser AS CU
+                JOIN net.useraccount AS U ON CU.user_id = U.user_id AND CU.chat_id = _chat_id
+        )
+        SELECT
+            json_build_object(
+            'chat_id', C.chat_id,
+            'chat_name', C.chat_name,
+            'members', (SELECT M.members FROM members AS M))
+        FROM net.chat AS C
+            WHERE C.chat_id = _chat_id);
+    END;
+    $$ SECURITY DEFINER SET SEARCH_PATH = public LANGUAGE plpgsql;
+
 -- Добавить пользователя
 CREATE FUNCTION net.add_user(_user_login VARCHAR(30), _user_name VARCHAR(255), _password_hash VARCHAR(256)) RETURNS INT AS
     $$
@@ -55,18 +78,17 @@ CREATE FUNCTION net.add_chat(_chat_name VARCHAR(255), users INT[]) RETURNS INT A
     $$ SECURITY DEFINER SET SEARCH_PATH = public LANGUAGE plpgsql;
 
 -- Добавить пользователя в чат
-CREATE PROCEDURE net.add_chat_member(_user_id INT, _chat_id INT) AS
+CREATE FUNCTION net.add_chat_member(_user_id INT, _chat_id INT) RETURNS TABLE(j_values json) AS
     $$
     BEGIN
         INSERT INTO net.ChatUser(user_id, chat_id) VALUES (_user_id, _chat_id);
+        RETURN QUERY (SELECT net.get_chat_members(_chat_id));
     END;
     $$ SECURITY DEFINER SET SEARCH_PATH = public LANGUAGE plpgsql;
 
 -- Является ли пользователь участником чата
-CREATE OR REPLACE FUNCTION Net.user_in_chat(_user_login VARCHAR(30), _chat_id INT) RETURNS BOOLEAN AS
+CREATE OR REPLACE FUNCTION Net.user_in_chat(_user_id INT, _chat_id INT) RETURNS BOOLEAN AS
     $$
-    DECLARE
-        _user_id INT := (SELECT user_id FROM net.UserAccount WHERE _user_login = user_login);
     BEGIN
         IF _user_id IN (SELECT user_id FROM net.ChatUser WHERE chat_id = _chat_id) THEN
             RETURN TRUE;
